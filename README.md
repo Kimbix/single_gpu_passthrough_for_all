@@ -226,7 +226,7 @@ Once the Windows installation media can detect the Virtual Disk, select the disk
 Once you're inside of Windows, install the VirtIO drivers and turn off the VM.
 
 ## Finishing touches for the VM
-Once you have finished the Windows installation and the VM is turned off, you can remove any Spice Hardware, as it won't be needed anymore.
+Once you have finished the Windows installation and the VM is turned off, you can remove any Spice Hardware and the CDROM disks, as they won't be needed anymore.
 
 # GETTING AND PATCHING YOUR VBIOS
 Now, to get the GPU working, we will have to look for it's vBIOS.
@@ -264,8 +264,8 @@ First, download a HEX editor and open the rom file with it.
 Using the search function of your preferred editor, search for the text "VIDEO", once you find it, remove everything before the first letter U to the left of "VIDEO".
 
 These images might help visualize what I'm trying to say:
+(Image from Risingprism's guide)
 ![image](https://user-images.githubusercontent.com/83105263/153798510-93397ab1-fb46-4953-8567-0188c23692d6.png)
-![image](https://user-images.githubusercontent.com/83105263/153798518-7b265542-8fd8-4a07-80c7-fcb3d733248f.png)
 
 #### NOTE: IF YOU CANNOT FIND VIDEO IN YOUR vBIOS, THIS MIGHT MEAN IT'S ALREADY "PATCHED", IF THE FIRST LETTER OF YOUR VBIOS IS A U, THIS MIGHT IN FACT BE THE CASE.
 
@@ -569,3 +569,137 @@ These scripts require a user systemd service, you can keep systemd services runn
 If you in fact, choose to avoid doing this, you WILL have to reboot your computer every time you want to go back to linux.
 
 # ATTATCH THE DESIRED DEVICES TO THE VM
+Open the configurations of your VM in virt-manager and select the option to Add Hardware, go into PCI devices and add every device that was in the IOMMU group from the IOMMU section.
+
+Enable XML editing in your virt-manager preferences (Edit -> Preferences -> General -> Check Enable XML editing), and add the following line above the <address/> in every device you add:
+```
+<hostdev mode="subsystem" type="pci" managed="yes">
+  <source>
+    <address domain="0x0000" bus="0x2d" slot="0x00" function="0x0"/>
+  </source>
+  <rom file="/var/lib/libvirt/vbios/GPU.rom"/> (ADD THIS LINE)
+  <address type="pci" domain="0x0000" bus="0x06" slot="0x00" function="0x0"/>
+</hostdev>
+
+NOTE: If you are on an selinux system (Fedora) remember to change your path to "/var/lib/libvirt/vbios/GPU.rom"
+```
+
+## Attaching USB devices
+If you want to use USB devices in your VM (Like a mouse and keyboard), your must add them the same way you added the GPU, but instead of going to the PCI devices, you go to the USB devices and add the desired ones.
+
+Most of these don't require further setup to get working.
+
+# DEEP INTO THE XML FILE
+su into your root user and execute the following commands.
+export EDITOR=[Text editor of preference]
+virsh edit [Name of VM]
+
+## NVIDIA USERS
+Edit or add the following lines
+```
+  </os>
+  <features>
+    <acpi/>
+    <apic/>
+    <hyperv>
+      <relaxed state='on'/>
+      <vapic state='on'/>
+      <spinlocks state='on' retries='8191'/>
+      <vendor_id state='on' value='123456789123'/>
+    </hyperv>
+    <kvm>
+      <hidden state='on'/>
+    </kvm>
+    <vmport state='off'/>
+    <ioapic driver='kvm'/>
+```
+
+## AMD CPU users:
+Edit or add the following lines:
+```
+</features>
+  <cpu mode='host-passthrough' check='none'>
+    <topology sockets='1' cores='6' threads='2'/>
+    <feature policy='require' name='topoext'/>
+  </cpu>
+```
+
+## Intel CPU users:
+Edit or add the following lines:
+```
+</features>
+  <cpu mode='host-passthrough' check='none'>
+    <topology sockets='1' cores='6' threads='2'/>
+    <feature policy='disable' name='smep'/>
+  </cpu>
+```
+
+## If you want to be able to take snapshots
+Change the following line:
+```
+From: 
+	<loader readonly='yes' type='pflash'>/usr/share/edk2/ovmf/OVMF_CODE.fd</loader>
+To:
+	 <loader readonly='yes' type='rom'>/usr/share/edk2-ovmf/x64/OVMF_CODE.fd</loader>
+```
+
+# IMPORTANT FOR AMD NAVI USERS
+Due to an annoying bug, Navi Series 10 GPU's can't turn off while the system is booted, making it impossible to pass them to a VM. Fortunately, people way smarter than me have found workarounds to this, and have found a very good one:
+
+Vendor-Reset: https://github.com/gnif/vendor-reset
+
+If you in fact NEED this to get it working, follow the instructions on how to install the repository.
+
+## If the module still did not work, you might need to add the following fix
+Create the following file "/lib/systemd/system/vrwa.service" with:
+```
+sudo touch /lib/systemd/system/vrwa.service
+```
+And open it with the text editor of your choice with root privileges.
+
+Make it's contents this:
+```
+[Unit]
+Description=vrwa Service
+After=multi-user.target
+
+[Service]
+ExecStart=/usr/bin/bash -c 'echo device_specific > /sys/bus/pci/devices/0000:0c:00.0/reset_method'
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Start and enable the service with
+```
+systemctl start vrwa
+systemctl enable vrwa
+```
+
+And you SHOULD be good to go.
+
+# Loading modules
+Remember the other values of the IOMMU groups that we never used, we're going to use them here.
+
+When loading the VFIO modules, we have to specify which devices will be controlled by said modules, we do so by editing the "/etc/modprobe.d/vfio.conf" file, we open it with our text editor of preference with root privileges and change it's contents to the following:
+```
+The ids have to be the ones extracted from the IOMMU script, they don't have to be in any specific order.
+
+I personally have it set up like this:
+options vfio-pci ids=1002:7340,1002:ab38
+```
+
+Once this is done, the virtual machine will be good to go.
+
+# THANK YOU SECTION
+Thanks to Risingprism's guide for being the backbone of this guide. Link to their guide: https://gitlab.com/risingprismtv/single-gpu-passthrough/-/wikis/home
+Thanks to joeknok90's guide for providing some extra information that was not provided in Risingprism's guide. Link to their guide: https://github.com/joeknock90/Single-GPU-Passthrough
+Thanks to the entire developer team behind the vendor-reset module. Link to the repo: https://github.com/gnif/vendor-reset
+Thanks to maier-johno for providing a solution to the vendor-reset module problem with newer kernels. Link to their profile https://github.com/maier-johno
+
+# AFTERWORD
+I hated every second of making this guide oh my god why did I go through the pain of making this, I guess I wanted to make something educational IDK its like 2AM I need some sleep. Goodnight Tristate Area.
+
+If something, ANYTHING, goes wrong, do NOT feel afraid of contacting me through discord, I want to make this guide as ACCURATE as possible, since all other guides seem to be so confident in their configurations, but literally every single one of them failed to mention the vendor-reset bug, very little of them mentioned the vfio-pci modules configuration, and some other little discrepancies in between all of the guides.
+
+Discord Kimbix#0234, if I'm green, I'll answer 99% of the time.
