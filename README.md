@@ -79,7 +79,8 @@ Group 15:
 Group 16:
 	2d:00.1 Audio device [0403]: Advanced Micro Devices, Inc. [AMD/ATI] Navi 10 HDMI Audio[1002:ab38]
 ```
-You have to (USUALLY) search for a VGA compatible controller and for a HDMI Audio.
+You have to (USUALLY) search for a VGA compatible controller and for HDMI Audio.
+
 #### NOTE: Several situations can happen when executing the script, I will name the ones I know about:
   - The GPU and it's sound device are in diferent IOMMU groups, this is of no importance and you should proceed normally
   -  The GPU and it's sound device are in the same IOMMU group, this is completely normal and you should give zero atention to this fact.
@@ -155,7 +156,7 @@ sudo systemctl enable libvirtd
 
 OpenRC:
 rc-service libvirtd start (If service wasn't started already)
-rc-service add libvirtd default
+rc-update add libvirtd default
 ```
 
 ### Editing QEMU configuration files
@@ -282,8 +283,175 @@ Save the file and proceed to the next step.
 
 ## If you use anything else
 
-  - Make the following directory "sudo mkdir /usr/share/vgabios"
+  - Make the following directory "sudo mkdir /usr/share/vgabios".
   - Place the rom in above directory with "sudo mv [path to your .rom file] /usr/share/vgabios/GPU.rom".
   - cd into the directory with "cd /usr/share/vgabios".
-  - Change the permissions of the file with "sudo chmod -R 660 <ROMFILE>.rom".
-  - Tell the system you own the file with "sudo chown username:username <ROMFILE>.rom ".
+  - Change the permissions of the file with "sudo chmod -R 660 GPU.rom".
+  - Tell the system you own the file with "sudo chown username:username GPU.rom ".
+
+# SETTING THE LIBVIRT HOOKS
+Make the directory (If not created already) "/etc/libvirt/hooks" and cd into it "cd /etc/libvirt/hooks".
+	
+Here, we care about 3 files:
+  - /etc/libvirt/hooks/qemu
+  - /etc/libvirt/hooks/qemu.d/[Name of your VM]/prepare/begin/start.sh
+  - /etc/libvirt/hooks/qemu.d/[Name of your VM]/release/end/stop.sh
+
+## qemu File
+Open the qemu file with root privileges and make sure it has the following content:
+```
+#!/bin/bash
+#
+# Author: Sebastiaan Meijer (sebastiaan@passthroughpo.st)
+#
+# Copy this file to /etc/libvirt/hooks, make sure it's called "qemu".
+# After this file is installed, restart libvirt.
+# From now on, you can easily add per-guest qemu hooks.
+# Add your hooks in /etc/libvirt/hooks/qemu.d/vm_name/hook_name/state_name.
+# For a list of available hooks, please refer to https://www.libvirt.org/hooks.html
+#
+
+GUEST_NAME="$1"
+HOOK_NAME="$2"
+STATE_NAME="$3"
+MISC="${@:4}"
+
+BASEDIR="$(dirname $0)"
+
+HOOKPATH="$BASEDIR/qemu.d/$GUEST_NAME/$HOOK_NAME/$STATE_NAME"
+
+set -e # If a script exits with an error, we should as well.
+
+# check if it's a non-empty executable file
+if [ -f "$HOOKPATH" ] && [ -s "$HOOKPATH"] && [ -x "$HOOKPATH" ]; then
+    eval \"$HOOKPATH\" "$@"
+elif [ -d "$HOOKPATH" ]; then
+    while read file; do
+        # check for null string
+        if [ ! -z "$file" ]; then
+          eval \"$file\" "$@"
+        fi
+    done <<< "$(find -L "$HOOKPATH" -maxdepth 1 -type f -executable -print;)"
+fi
+```
+(The qemu script does not belong to me, it's made by someone else, this script is usually not configured user-by-user as it will work on "almost" any setup")
+
+## Making the necessary folders
+Execute the following commands to make the necessary folders and files (If not already created):
+```
+sudo mkdir /etc/libvirt/hooks/qemu.d
+sudo mkdir /etc/libvirt/hooks/[Name of your VM]
+
+sudo mkdir /etc/libvirt/hooks/[Name of your VM]/prepare
+sudo mkdir /etc/libvirt/hooks/[Name of your VM]/prepare/begin
+sudo touch /etc/libvirt/hooks/[Name of your VM]/prepare/begin/start.sh
+
+sudo mkdir /etc/libvirt/hooks/[Name of your VM]/release
+sudo mkdir /etc/libvirt/hooks/[Name of your VM]/release/end
+sudo touch /etc/libvirt/hooks/[Name of your VM]/release/end/stop.sh
+```
+
+## Making our start.sh script
+This is kind of like a choose your path adventure, where you choose your system configuration to make the script.
+
+First, we begin with the absolutely necessary:
+```
+#!/bin/bash
+```
+
+If we want to add output when debugging, we add
+```
+set -x
+```
+
+Now we gotta stop our display manager, usually just writting systemctl stop display-manager.service is enough, but we might have to specify, so it's safer to add the line like so:
+```
+systemd
+systemctl stop [Your display manager].service
+
+OpenRC
+rc-service [Your display manager] stop
+```
+
+Now we add some necessary lines that don't differ from any configuration
+```
+# Unbind VTconsoles
+echo 0 > /sys/class/vtconsole/vtcon0/bind
+echo 0 > /sys/class/vtconsole/vtcon1/bind
+```
+
+We make the system wait for a few seconds to avoid running into problems, the wait time can be adjusted, but I don't recommended to make it less than 3 seconds.
+```
+sleep [Ammount of seconds]
+```
+
+Now, we unload the drivers from the GPU, to know which drivers are currently in use by the devices we're goint to pass through, we can execute the command "lspci -nnk", in the output, we look for the devices that we're goint to pass, and read the line that says "Kernel driver in use: ..."
+
+Example output:
+```
+2d:00.0 VGA compatible controller [0300]: Advanced Micro Devices, Inc. [AMD/ATI] Navi 14 [Radeon RX 5500/5500M / Pro 5500M] [1002:7340] (rev c5)
+	Subsystem: XFX Pine Group Inc. Device [1682:5501]
+	Kernel driver in use: amdgpu
+	Kernel modules: amdgpu
+	
+2d:00.1 Audio device [0403]: Advanced Micro Devices, Inc. [AMD/ATI] Navi 10 HDMI Audio [1002:ab38]
+	Subsystem: XFX Pine Group Inc. Device [1682:5501]
+	Kernel driver in use: snd_hda_intel
+	Kernel modules: snd_hda_intel
+	
+In my case, I would have to unload the amgpu and snd_hda_intel drivers.
+```
+
+Using the information above, we unload the drivers accordingly:
+```
+In my case, I would unload the drivers like this:
+	modprobe -r amdgpu
+	modprobe -r snd_hda_intel
+```
+
+Now, we unbind the GPU from the display driver with the following command:
+```
+Remember the numbers we 
+virsh nodedev-detach pci_0000_2d_00_0
+virsh nodedev-detach pci_0000_2d_00_1
+```
+
+And finally we load the VFIO kernel module (We will come back to this later):
+```
+modprobe vfio
+modprobe vfio_pci
+modprobe vfio_iommu_type1
+```
+
+Your start.sh script should look something like this:
+```
+#!/bin/bash
+# Debugging
+set -x
+
+# Stop the display manager
+systemctl stop sddm.service
+
+# Unbind VTconsoles
+echo 0 > /sys/class/vtconsole/vtcon0/bind
+echo 0 > /sys/class/vtconsole/vtcon1/bind
+
+# Avoid problems by waiting.
+sleep 4
+
+# Unload all AMD drivers
+modprobe -r amdgpu
+modprobe -r snd_hda_intel
+
+# Unbind the GPU from display driver
+virsh nodedev-detach pci_0000_2d_00_0
+virsh nodedev-detach pci_0000_2d_00_1
+
+# Load VFIO kernel module
+modprobe vfio
+modprobe vfio_pci
+modprobe vfio_iommu_type1
+```
+
+Finally, we make the file executable with "chmod +x /etc/libvirt/hooks/qemu.d/[Name of your VM]/prepare/begin/start.sh" and continue to make our release script.
+
