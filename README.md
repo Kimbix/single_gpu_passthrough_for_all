@@ -691,11 +691,11 @@ options vfio-pci ids=1002:7340,1002:ab38
 
 Once this is done, the virtual machine will be good to go.
 
-# THANK YOU SECTION
-Thanks to Risingprism's guide for being the backbone of this guide. Link to their guide: https://gitlab.com/risingprismtv/single-gpu-passthrough/-/wikis/home
-Thanks to joeknok90's guide for providing some extra information that was not provided in Risingprism's guide. Link to their guide: https://github.com/joeknock90/Single-GPU-Passthrough
-Thanks to the entire developer team behind the vendor-reset module. Link to the repo: https://github.com/gnif/vendor-reset
-Thanks to maier-johno for providing a solution to the vendor-reset module problem with newer kernels. Link to their profile https://github.com/maier-johno
+# SPECIAL THANKS TO...
+- Thanks to Risingprism's guide for being the backbone of this guide. Link to their guide: https://gitlab.com/risingprismtv/single-gpu-passthrough/-/wikis/home
+- Thanks to joeknok90's guide for providing some extra information that was not provided in Risingprism's guide. Link to their guide: https://github.com/joeknock90/Single-GPU-Passthrough
+- Thanks to the entire developer team behind the vendor-reset module. Link to the repo: https://github.com/gnif/vendor-reset
+- Thanks to maier-johno for providing a solution to the vendor-reset module problem with newer kernels. Link to their profile https://github.com/maier-johno
 
 # AFTERWORD
 I hated every second of making this guide oh my god why did I go through the pain of making this, I guess I wanted to make something educational IDK its like 2AM I need some sleep. Goodnight Tristate Area.
