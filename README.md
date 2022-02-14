@@ -1,5 +1,10 @@
 The Ultimate Single GPU Passthrough Guide
 
+# NOTES
+	- This guide is written from the perspective of an Arch User, if any of the steps differ in your distribution, or I have missed something in your distribution, you can make an Issue and I'll take a look at it, you can also write to my Discord: Kimbix#0234.
+	- If you also feel like something is poorly redacted, I am sorry, English is not my native language and you can send corrections to my Discord (Kimbix#0234), or make an Issue.
+	- When a command contains brackets "[]" the content inside them are not to be taken literally and you HAVE to replace them with what is written inside them. Example: "sudo groups [your username]" I would write "sudo groups kimbix"
+
 # Prerequisites
 ## AMD USERS
 If you have an AMD CPU you must enable the following in your BIOS.
@@ -185,3 +190,82 @@ And to manually start it execute the following command:
 ```
 sudo virsh net-start default
 ```
+
+# CREATING THE VIRTUAL MACHINE IN VIRT-MANAGER
+## Prerequisites
+	- A Windows 10 ISO: https://www.microsoft.com/en-us/software-download/windows10ISO.
+	- VirtIO Drivers: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso.
+
+## Creating the VM
+	1 - Select the QEMU/KVM Connection.
+	2 - Select to install the OS using local media.
+	3 - Select Browse -> Browse Local -> Your Windows 10 ISO file.
+	4 - Leave the RAM and CPU settings the default (we will change them later).
+	5 - Create a disk image for the virtual machine (If using for gaming my recommended size is 128GB), you can use .qcow2 or .raw, it doesn't really affect performance that much.
+	6 - **IMPORTANT**: Check the box "Customize configuration before install", and select Finish.
+
+## Configuring the VM
+	1 - Overview: Make sure the chipset is set to Q35 and the Firmware option is set to UEFIx86_64:/usr/share/edk2-ovmf/x64/OVMF_CODE.fd (You might have multiple OVMF_CODE.fd available to you, the preferred option is the one that has in it's path x64).
+	2 - CPUs: Uncheck the box Copy host CPU configuration, and set the Model to host-passthrough; Under the topology section, check the box Manually set CPU topology, and set it to whatever your CPU is like, usually you only have 1 socket, and then multiply the Cores * Threads to get your vCPU allocation, Virt-Manager will indicate you if your configuration is invalid.
+	3 - Memory: Allocate memory to the virtual machine (NOTE: If your memory allocation is NOT valid, the VM might not boot, the safest values are multiples of 2048).
+	4 - Boot Options: Check the SATA CDROM 1 box and move it to the top of the list.
+	5 - SATA Disk 1: Change the Disk bus to VirtIO; Under the Advanced options section change the Cache mode to writeback.
+	6 - Network Section (2 computers): Change the Device model to virtio.
+	7 - Add Hardware: Under the storage section, select device type CDROM device, and select the VirtIO drivers (Manage -> Browse Local -> VirtIO drivers).
+	
+#### You are now ready to boot into your VM and install windows.
+
+## Installing Windows
+Once you are inside of the Windows installation, once you are prompted to select a type of install, select Custom Install; Windows will not be able to read the virtual disk without the VirtIO drivers, so you'll have to load them manually.
+Select Load Drivers and Windows will automatomatically detect the VirtIO drivers and will ask you to select one, select the w10 drivers and wait for them to install. Otherwise if Windows does NOT automatically detect the VirtIO drivers, look for them in your filesystem or check that you added the hardware properly.
+Once the Windows installation media can detect the Virtual Disk, select the disk to perform the instalation and wait for the installation to complete.
+
+## Finalizing the Windows setup
+Once you're inside of Windows, install the VirtIO drivers and turn off the VM.
+
+## Finishing touches for the VM
+Once you have finished the Windows installation and the VM is turned off, you can remove any Spice Hardware, as it won't be needed anymore.
+
+# GETTING AND PATCHING YOUR VBIOS
+Now, to get the GPU working, we will have to look for it's vBIOS.
+
+There are multiple ways to go about doing this, and I will cover every way I know of doing it:
+
+## Downloading it from the internet
+The only reliable website I have knowledge of that provides GPUs vBIOS, is TechPowerup.com, if you're planning on aquiring your vBIOS this way, you HAVE to know the EXACT model of your GPU, otherwise it will not work.
+
+Techpowerup website: https://www.techpowerup.com/vgabios/
+
+## Dumping it from Windows 10
+If you have a way to boot into Windows 10 using your GPU (The VM doesn't work), you can use a program like CPU-Z to aquire the vBIOS.
+
+CPU-Z website: https://www.cpuid.com/softwares/cpu-z.html
+
+## Dumping it from Linux
+If you don't want to boot into Windows 10 and don't want to download it from the internet, you can dump it directly from Linux with these programs:
+
+NVIDIA: https://www.techpowerup.com/download/nvidia-nvflash/
+AMD: https://www.techpowerup.com/download/ati-atiflash/
+
+To dump it using these programs you will have to follow these steps:
+	1 - Ctrl + Alt + F2 into a Terminal
+	2 - Stop your display manager with "sudo systemctl stop [Your display manager].service" or "sudo rc-service stop [Your display manager]".
+	3 - Unload your GPU modules with "sudo rmmod nvidia, nvidia_uvm, nvidia_modeset" or "sudo rmmod amdgpu" (I don't know if this step is necesary for AMD users, as I did not do it when dumping my vBIOS).
+	4 - cd into the directory where the file is located and make the file executable with the following command "chmod u+x [nvflash / amdvbflash]".
+	5 - Execute the following command to save the vBIOS in your current directory "sudo ./nvflash_linux --save test.rom" or "sudo ./ati --save test.rom".
+	6 - Load your modules once more "sudo modprobe nvidia, nvidia_uvm, nvidia_modeset" or "sudo modprobe amdgpu" and start your display manager again "sudo systemctl start [Your display manager].service" or "sudo rc-service start [Your display manager]".
+	
+## Patching your vBIOS
+This is a complicated (and honestly annoying) step.
+
+First, download a HEX editor and open the rom file with it.
+Using the search function of your preferred editor, search for the text "VIDEO", once you find it, remove everything before the first letter U to the left of "VIDEO".
+
+These images might help visualize what I'm trying to say:
+![image](https://user-images.githubusercontent.com/83105263/153798510-93397ab1-fb46-4953-8567-0188c23692d6.png)
+![image](https://user-images.githubusercontent.com/83105263/153798518-7b265542-8fd8-4a07-80c7-fcb3d733248f.png)
+
+
+#### NOTE: IF YOU CANNOT FIND VIDEO IN YOUR vBIOS, THIS MIGHT MEAN IT'S ALREADY "PATCHED", IF THE FIRST LETTER OF YOUR VBIOS IS A U, THIS MIGHT IN FACT BE THE CASE.
+
+Save the file and proceed to the next step.
