@@ -1,9 +1,10 @@
 The Ultimate Single GPU Passthrough Guide
 
 # NOTES
-	- This guide is written from the perspective of an Arch User, if any of the steps differ in your distribution, or I have missed something in your distribution, you can make an Issue and I'll take a look at it, you can also write to my Discord: Kimbix#0234.
-	- If you also feel like something is poorly redacted, I am sorry, English is not my native language and you can send corrections to my Discord (Kimbix#0234), or make an Issue.
-	- When a command contains brackets "[]" the content inside them are not to be taken literally and you HAVE to replace them with what is written inside them. Example: "sudo groups [your username]" I would write "sudo groups kimbix"
+  - This guide is made for people that want a gaming VM but don't really have THAT much experience with the topic, so I'm making it as DETAILED as possible to make sure every nook and cranny is perfect and every option I have come across is presented.
+  - This guide is written from the perspective of an Arch User, if any of the steps differ in your distribution, or I have missed something in your distribution, you can make an Issue and I'll take a look at it, you can also write to my Discord: Kimbix#0234.
+  - If you also feel like something is poorly redacted, I am sorry, English is not my native language and you can send corrections to my Discord (Kimbix#0234), or make an Issue.
+  - When a command contains brackets "[]" the content inside them are not to be taken literally and you HAVE to replace them with what is written inside them. Example: "sudo groups [your username]" I would write "sudo groups kimbix"
 
 # Prerequisites
 ## AMD USERS
@@ -197,21 +198,21 @@ sudo virsh net-start default
 	- VirtIO Drivers: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso.
 
 ## Creating the VM
-	1 - Select the QEMU/KVM Connection.
-	2 - Select to install the OS using local media.
-	3 - Select Browse -> Browse Local -> Your Windows 10 ISO file.
-	4 - Leave the RAM and CPU settings the default (we will change them later).
-	5 - Create a disk image for the virtual machine (If using for gaming my recommended size is 128GB), you can use .qcow2 or .raw, it doesn't really affect performance that much.
-	6 - **IMPORTANT**: Check the box "Customize configuration before install", and select Finish.
+  - Select the QEMU/KVM Connection.
+  - Select to install the OS using local media.
+  - Select Browse -> Browse Local -> Your Windows 10 ISO file.
+  - Leave the RAM and CPU settings the default (we will change them later).
+  - Create a disk image for the virtual machine (If using for gaming my recommended size is 128GB), you can use .qcow2 or .raw, it doesn't really affect performance that much.
+  - **IMPORTANT**: Check the box "Customize configuration before install", and select Finish.
 
 ## Configuring the VM
-	1 - Overview: Make sure the chipset is set to Q35 and the Firmware option is set to UEFIx86_64:/usr/share/edk2-ovmf/x64/OVMF_CODE.fd (You might have multiple OVMF_CODE.fd available to you, the preferred option is the one that has in it's path x64).
-	2 - CPUs: Uncheck the box Copy host CPU configuration, and set the Model to host-passthrough; Under the topology section, check the box Manually set CPU topology, and set it to whatever your CPU is like, usually you only have 1 socket, and then multiply the Cores * Threads to get your vCPU allocation, Virt-Manager will indicate you if your configuration is invalid.
-	3 - Memory: Allocate memory to the virtual machine (NOTE: If your memory allocation is NOT valid, the VM might not boot, the safest values are multiples of 2048).
-	4 - Boot Options: Check the SATA CDROM 1 box and move it to the top of the list.
-	5 - SATA Disk 1: Change the Disk bus to VirtIO; Under the Advanced options section change the Cache mode to writeback.
-	6 - Network Section (2 computers): Change the Device model to virtio.
-	7 - Add Hardware: Under the storage section, select device type CDROM device, and select the VirtIO drivers (Manage -> Browse Local -> VirtIO drivers).
+  - Overview: Make sure the chipset is set to Q35 and the Firmware option is set to UEFIx86_64:/usr/share/edk2-ovmf/x64/OVMF_CODE.fd (You might have multiple OVMF_CODE.fd available to you, the preferred option is the one that has in it's path x64).
+  - CPUs: Uncheck the box Copy host CPU configuration, and set the Model to host-passthrough; Under the topology section, check the box Manually set CPU topology, and set it to whatever your CPU is like, usually you only have 1 socket, and then multiply the Cores * Threads to get your vCPU allocation, Virt-Manager will indicate you if your configuration is invalid.
+  - Memory: Allocate memory to the virtual machine (NOTE: If your memory allocation is NOT valid, the VM might not boot, the safest values are multiples of 2048).
+  - Boot Options: Check the SATA CDROM 1 box and move it to the top of the list.
+  - SATA Disk 1: Change the Disk bus to VirtIO; Under the Advanced options section change the Cache mode to writeback.
+  - Network Section (2 computers): Change the Device model to virtio.
+  - Add Hardware: Under the storage section, select device type CDROM device, and select the VirtIO drivers (Manage -> Browse Local -> VirtIO drivers).
 	
 #### You are now ready to boot into your VM and install windows.
 
@@ -248,12 +249,12 @@ NVIDIA: https://www.techpowerup.com/download/nvidia-nvflash/
 AMD: https://www.techpowerup.com/download/ati-atiflash/
 
 To dump it using these programs you will have to follow these steps:
-	1 - Ctrl + Alt + F2 into a Terminal
-	2 - Stop your display manager with "sudo systemctl stop [Your display manager].service" or "sudo rc-service stop [Your display manager]".
-	3 - Unload your GPU modules with "sudo rmmod nvidia, nvidia_uvm, nvidia_modeset" or "sudo rmmod amdgpu" (I don't know if this step is necesary for AMD users, as I did not do it when dumping my vBIOS).
-	4 - cd into the directory where the file is located and make the file executable with the following command "chmod u+x [nvflash / amdvbflash]".
-	5 - Execute the following command to save the vBIOS in your current directory "sudo ./nvflash_linux --save test.rom" or "sudo ./ati --save test.rom".
-	6 - Load your modules once more "sudo modprobe nvidia, nvidia_uvm, nvidia_modeset" or "sudo modprobe amdgpu" and start your display manager again "sudo systemctl start [Your display manager].service" or "sudo rc-service start [Your display manager]".
+  - Ctrl + Alt + F2 into a Terminal
+  - Stop your display manager with "sudo systemctl stop [Your display manager].service" or "sudo rc-service stop [Your display manager]".
+  - Unload your GPU modules with "sudo rmmod nvidia, nvidia_uvm, nvidia_modeset" or "sudo rmmod amdgpu" (I don't know if this step is necesary for AMD users, as I did not do it when dumping my vBIOS).
+  - cd into the directory where the file is located and make the file executable with the following command "chmod u+x [nvflash / amdvbflash]".
+  - Execute the following command to save the vBIOS in your current directory "sudo ./nvflash_linux --save test.rom" or "sudo ./ati --save test.rom".
+  - Load your modules once more "sudo modprobe nvidia, nvidia_uvm, nvidia_modeset" or "sudo modprobe amdgpu" and start your display manager again "sudo systemctl start [Your display manager].service" or "sudo rc-service start [Your display manager]".
 	
 ## Patching your vBIOS
 This is a complicated (and honestly annoying) step.
@@ -265,7 +266,24 @@ These images might help visualize what I'm trying to say:
 ![image](https://user-images.githubusercontent.com/83105263/153798510-93397ab1-fb46-4953-8567-0188c23692d6.png)
 ![image](https://user-images.githubusercontent.com/83105263/153798518-7b265542-8fd8-4a07-80c7-fcb3d733248f.png)
 
-
 #### NOTE: IF YOU CANNOT FIND VIDEO IN YOUR vBIOS, THIS MIGHT MEAN IT'S ALREADY "PATCHED", IF THE FIRST LETTER OF YOUR VBIOS IS A U, THIS MIGHT IN FACT BE THE CASE.
 
 Save the file and proceed to the next step.
+
+## If you use selinux (Fedora)
+
+  - Make the following directory "sudo mkdir /var/lib/libvirt/vbios".
+  - Place the rom in above directory with "sudo mv [path to your .rom file] /var/lib/libvirt/vbios/GPU.rom".
+  - cd into the directory with "cd /var/lib/libvirt/vbios".
+  - Add the propper permissions to the file with "sudo chmod -R 660 GPU.rom".
+  - Tell the system you own the file with "sudo chown [your username:your username] GPU.rom".
+  - Change your SELinux configuration with "sudo semanage fcontext -a -t virt_image_t /var/lib/libvirt/vbios/GPU.rom".
+  - Change the context of the file with "sudo restorecon -v /var/lib/libvirt/vbios/GPU.rom".
+
+## If you use anything else
+
+  - Make the following directory "sudo mkdir /usr/share/vgabios"
+  - Place the rom in above directory with "sudo mv [path to your .rom file] /usr/share/vgabios/GPU.rom".
+  - cd into the directory with "cd /usr/share/vgabios".
+  - Change the permissions of the file with "sudo chmod -R 660 <ROMFILE>.rom".
+  - Tell the system you own the file with "sudo chown username:username <ROMFILE>.rom ".
