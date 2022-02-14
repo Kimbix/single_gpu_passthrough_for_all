@@ -476,8 +476,6 @@ Finally, we make the file executable with "chmod +x /etc/libvirt/hooks/qemu.d/[N
 ## Making our stop.sh script
 The stop script is not AS IMPORTANT as the start script, as one could just issue a restart when the machine is stopped to get back to linux, but if one wants to go back to linux after using the VM without the need of a restart, we have to make a stop script.
 
-
-
 We begin with the absolutely necessary:
 ```
 #!/bin/bash
@@ -490,6 +488,17 @@ modprobe -r vfio_pci
 modprobe -r vfio_iommu_type1
 ```
 
+We then Rebind the GPU to the AMD drivers with the following commands
+```
+Remember to use YOUR values to make these commands, these is how I have it personally set up:
+Values:
+	2d:00.0
+	2d:00.1
+Commands (IMPORTANT: we add the devices in decreasing order, in this case 1 then 0):
+	virsh nodedev-reattach pci_0000_2d_00_1
+	virsh nodedev-reattach pci_0000_2d_00_0
+```
+
 Then we reload the modules we unloaded in the start script:
 ```
 These are the modules I unloaded in my start script and thus, I have to reload them in the release script
@@ -498,15 +507,9 @@ modprobe amdgpu
 modprobe snd_hda_intel
 ```
 
-We then Rebind the GPU to the AMD drivers with the following commands
+Now we add some sleep time to avoid conflicts, time of sleep time may vary, but I personally use 4 seconds, and would't go lower than 3
 ```
-Remember to use YOUR values to make these commands, these is how I have it personally set up:
-Values:
-	2d:00.0
-	2d:00.1
-Commands:
-	virsh nodedev-reattach pci_0000_2d_00_0
-	virsh nodedev-reattach pci_0000_2d_00_1
+sleep 4
 ```
 
 We rebind the VTconsoles we unbinded in the start script
@@ -545,12 +548,14 @@ modprobe -r vfio_iommu_type1
 modprobe -r vfio
 
 # Re-Bind GPU to AMD Driver
-virsh nodedev-reattach pci_0000_2d_00_0
 virsh nodedev-reattach pci_0000_2d_00_1
+virsh nodedev-reattach pci_0000_2d_00_0
 
 # Reload AMD kernel modules
 modprobe amdgpu
 modprobe snd_hda_intel
+
+sleep 4
 
 # Rebind VT consoles
 echo 1 > /sys/class/vtconsole/vtcon0/bind
@@ -563,10 +568,16 @@ echo "efi-framebuffer.0" > /sys/bus/platform/drivers/efi-framebuffer/bind
 systemctl start sddm.service
 ```
 
+Finally, we make the file executable with "chmod +x /etc/libvirt/hooks/qemu.d/[Name of your VM]/release/end/stop.sh" and continue.
+
 ## Important
 These scripts require a user systemd service, you can keep systemd services running by enabling linger for your user account with the following command "sudo loginctl enable-linger [your username]", This keeps services running even when your account is not logged into, this is an insecure practice and should be avoided.
 
 If you in fact, choose to avoid doing this, you WILL have to reboot your computer every time you want to go back to linux.
+
+I don't know how one would go about doing this in OpenRC, so if using OpenRC either you have to reboot, or look for an alternative, if someone in fact finds an alternative that works, please share it with me in my discord or create an Issue / Pull Request.
+
+#### IF YOU CANNOT GET BACK TO LINUX EVEN AFTER TRYING MILLIONS OF DIFFERENT RELEASE SCRIPTS, MY RECOMENDATION IS TO JUST EXECUTE A REBOOT COMMAND IN THE RELEASE SCRIPT.
 
 # ATTATCH THE DESIRED DEVICES TO THE VM
 Open the configurations of your VM in virt-manager and select the option to Add Hardware, go into PCI devices and add every device that was in the IOMMU group from the IOMMU section.
