@@ -373,11 +373,20 @@ OpenRC
 rc-service [Your display manager] stop
 ```
 
-Now we add some necessary lines that don't differ from any configuration
+If you use GNOME or GDM, you must add this line to the script:
 ```
-# Unbind VTconsoles
+killall gdm-x-session
+```
+
+We unbind the VT consoles, The ammount of unbind commands is equal to the ammount of vtconsoles you have, to check the ammount of vtconsoles you have, execute the following command "ls /sys/class/vtconsole/ | grep vtcon", and change the ammount of unbind commands depending on the output.
+```
 echo 0 > /sys/class/vtconsole/vtcon0/bind
 echo 0 > /sys/class/vtconsole/vtcon1/bind
+```
+
+Now we unbind the EFI-Framebutter with the following command:
+```
+echo efi-framebuffer.0 > /sys/bus/platform/drivers/efi-framebuffer/unbind
 ```
 
 We make the system wait for a few seconds to avoid running into problems, the wait time can be adjusted, but I don't recommended to make it less than 3 seconds.
@@ -402,7 +411,7 @@ Example output:
 In my case, I would have to unload the amgpu and snd_hda_intel drivers.
 ```
 
-Using the information above, we unload the drivers accordingly:
+Using the information above, we unload the kernel modules accordingly:
 ```
 In my case, I would unload the drivers like this:
 	modprobe -r amdgpu
@@ -411,9 +420,15 @@ In my case, I would unload the drivers like this:
 
 Now, we unbind the GPU from the display driver with the following command:
 ```
-Remember the numbers we 
-virsh nodedev-detach pci_0000_2d_00_0
-virsh nodedev-detach pci_0000_2d_00_1
+Remember the numbers we got from the IOMMU script, we are using the first of the 2 values here (Remember to add ALL of the devices that belong in your IOMMMU group).
+
+This is how I personally have it in my configuration:
+Values:
+	2d:00.0
+	2d:00.1
+Commands:
+	virsh nodedev-detach pci_0000_2d_00_0
+	virsh nodedev-detach pci_0000_2d_00_1
 ```
 
 And finally we load the VFIO kernel module (We will come back to this later):
@@ -436,6 +451,9 @@ systemctl stop sddm.service
 echo 0 > /sys/class/vtconsole/vtcon0/bind
 echo 0 > /sys/class/vtconsole/vtcon1/bind
 
+# Unbind EFI-Framebuffer
+echo efi-framebuffer.0 > /sys/bus/platform/drivers/efi-framebuffer/unbind
+
 # Avoid problems by waiting.
 sleep 4
 
@@ -455,3 +473,99 @@ modprobe vfio_iommu_type1
 
 Finally, we make the file executable with "chmod +x /etc/libvirt/hooks/qemu.d/[Name of your VM]/prepare/begin/start.sh" and continue to make our release script.
 
+## Making our stop.sh script
+The stop script is not AS IMPORTANT as the start script, as one could just issue a restart when the machine is stopped to get back to linux, but if one wants to go back to linux after using the VM without the need of a restart, we have to make a stop script.
+
+
+
+We begin with the absolutely necessary:
+```
+#!/bin/bash
+```
+
+First, we unload the VFIO drivers as the first thing we do:
+```
+modprobe -r vfio
+modprobe -r vfio_pci
+modprobe -r vfio_iommu_type1
+```
+
+Then we reload the modules we unloaded in the start script:
+```
+These are the modules I unloaded in my start script and thus, I have to reload them in the release script
+
+modprobe amdgpu
+modprobe snd_hda_intel
+```
+
+We then Rebind the GPU to the AMD drivers with the following commands
+```
+Remember to use YOUR values to make these commands, these is how I have it personally set up:
+Values:
+	2d:00.0
+	2d:00.1
+Commands:
+	virsh nodedev-reattach pci_0000_2d_00_0
+	virsh nodedev-reattach pci_0000_2d_00_1
+```
+
+We rebind the VTconsoles we unbinded in the start script
+```
+echo 1 > /sys/class/vtconsole/vtcon0/bind
+echo 1 > /sys/class/vtconsole/vtcon1/bind
+```
+
+NVIDIA users might want to add the following to their scripts:
+```
+nvidia-xconfig --query-gpu-info > /dev/null 2>&1
+```
+
+We rebind the EFI-Framebutter with the following command:
+```
+echo "efi-framebuffer.0" > /sys/bus/platform/drivers/efi-framebuffer/bind
+```
+
+And finally, we restart the display manager to get back into linux:
+```
+systemd
+systemctl start [Your display manager].service
+
+OpenRC
+rc-service [Your display manager] start
+```
+
+My personal stop script looks like this:
+```
+#!/bin/bash
+set -x
+
+# Unload VFIO-PCI Kernel Driver
+modprobe -r vfio_pci
+modprobe -r vfio_iommu_type1
+modprobe -r vfio
+
+# Re-Bind GPU to AMD Driver
+virsh nodedev-reattach pci_0000_2d_00_0
+virsh nodedev-reattach pci_0000_2d_00_1
+
+# Reload AMD kernel modules
+modprobe amdgpu
+modprobe snd_hda_intel
+
+# Rebind VT consoles
+echo 1 > /sys/class/vtconsole/vtcon0/bind
+echo 1 > /sys/class/vtconsole/vtcon1/bind
+
+#  Re-Bind EFI-Framebuffer
+echo "efi-framebuffer.0" > /sys/bus/platform/drivers/efi-framebuffer/bind
+
+# Restart the display manager
+systemctl start sddm.service
+```
+
+## Important
+These scripts require a user systemd service, you can keep systemd services running by enabling linger for your user account with the following command "sudo loginctl enable-linger [your username]", This keeps services running even when your account is not logged into, this is an insecure practice and should be avoided.
+
+If you in fact, choose to avoid doing this, you WILL have to reboot your computer every time you want to go back to linux.
+
+# ATTATCH THE DESIRED DEVICES TO THE VM
