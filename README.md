@@ -499,17 +499,17 @@ Commands (IMPORTANT: we add the devices in decreasing order, in this case 1 then
 	virsh nodedev-reattach pci_0000_2d_00_0
 ```
 
+We rebind the EFI-Framebutter with the following command:
+```
+echo "efi-framebuffer.0" > /sys/bus/platform/drivers/efi-framebuffer/bind
+```
+
 Then we reload the modules we unloaded in the start script:
 ```
 These are the modules I unloaded in my start script and thus, I have to reload them in the release script
 
 modprobe amdgpu
 modprobe snd_hda_intel
-```
-
-Now we add some sleep time to avoid conflicts, time of sleep time may vary, but I personally use 4 seconds, and would't go lower than 3
-```
-sleep 4
 ```
 
 We rebind the VTconsoles we unbinded in the start script
@@ -521,11 +521,6 @@ echo 1 > /sys/class/vtconsole/vtcon1/bind
 NVIDIA users might want to add the following to their scripts:
 ```
 nvidia-xconfig --query-gpu-info > /dev/null 2>&1
-```
-
-We rebind the EFI-Framebutter with the following command:
-```
-echo "efi-framebuffer.0" > /sys/bus/platform/drivers/efi-framebuffer/bind
 ```
 
 And finally, we restart the display manager to get back into linux:
@@ -547,6 +542,9 @@ modprobe -r vfio_pci
 modprobe -r vfio_iommu_type1
 modprobe -r vfio
 
+#  Re-Bind EFI-Framebuffer
+echo "efi-framebuffer.0" > /sys/bus/platform/drivers/efi-framebuffer/bind
+
 # Re-Bind GPU to AMD Driver
 virsh nodedev-reattach pci_0000_2d_00_1
 virsh nodedev-reattach pci_0000_2d_00_0
@@ -555,14 +553,9 @@ virsh nodedev-reattach pci_0000_2d_00_0
 modprobe amdgpu
 modprobe snd_hda_intel
 
-sleep 4
-
 # Rebind VT consoles
 echo 1 > /sys/class/vtconsole/vtcon0/bind
 echo 1 > /sys/class/vtconsole/vtcon1/bind
-
-#  Re-Bind EFI-Framebuffer
-echo "efi-framebuffer.0" > /sys/bus/platform/drivers/efi-framebuffer/bind
 
 # Restart the display manager
 systemctl start sddm.service
